@@ -157,21 +157,16 @@ const Store = {
     return this.tasks.find((t) => t.id === id);
   },
 
-  nextCode() {
-    let max = 0;
-    this.tasks.forEach((t) => {
-      const m = /(\d+)$/.exec(t.code || "");
-      if (m) max = Math.max(max, parseInt(m[1], 10));
-    });
-    return `${CODE_PREFIX}-${String(max + 1).padStart(4, "0")}`;
-  },
-
   // grava otimista: atualiza a cópia local (UI reage na hora) e envia ao
-  // Supabase em seguida, para que todo mundo com o link veja a mudança
+  // Supabase em seguida, para que todo mundo com o link veja a mudança.
+  // O código (SOPA-####) de tarefas novas é atribuído pelo próprio banco
+  // (trigger + sequence), não adivinhado no navegador — evita que duas
+  // pessoas criando tarefas ao mesmo tempo recebam o mesmo código.
   async upsert(task) {
     const idx = this.tasks.findIndex((t) => t.id === task.id);
-    if (idx === -1) {
-      task.code = task.code || this.nextCode();
+    const isNew = idx === -1;
+    if (isNew) {
+      task.code = "";
       task.createdAt = task.createdAt || nowISO();
       this.tasks.push(task);
     } else {
@@ -187,8 +182,16 @@ const Store = {
       this.tasks[idx] = task;
     }
 
-    const { error } = await sbClient.from("tasks").upsert(taskToRow(task));
-    if (error) console.error("Falha ao salvar solicitação:", error);
+    const { data, error } = await sbClient.from("tasks").upsert(taskToRow(task)).select().single();
+    if (error) {
+      console.error("Falha ao salvar solicitação:", error);
+      showToast("Não foi possível salvar a solicitação. Tente novamente.");
+      return;
+    }
+    if (isNew) {
+      const savedIdx = this.tasks.findIndex((t) => t.id === task.id);
+      if (savedIdx !== -1) this.tasks[savedIdx].code = data.code;
+    }
   },
 
   async remove(id) {

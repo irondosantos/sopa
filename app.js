@@ -127,7 +127,7 @@ const App = {
       if (document.getElementById("view-dashboard").classList.contains("is-active")) Dashboard.render();
     });
 
-    form.addEventListener("submit", (e) => {
+    form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const id = this.editingId || uid();
       const dueAt = combineDateTime(
@@ -153,11 +153,16 @@ const App = {
       };
       if (!task.title || !task.requesterName) return;
 
-      Store.upsert(task);
+      const wasEditing = this.editingId;
+      const submitBtn = form.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      await Store.upsert(task);
+      submitBtn.disabled = false;
+
       this.closeModal();
       Filters.render();
       Board.render();
-      showToast(this.editingId ? "Solicitação atualizada" : "Solicitação criada");
+      showToast(wasEditing ? "Solicitação atualizada" : "Solicitação criada");
       if (document.getElementById("view-dashboard").classList.contains("is-active")) Dashboard.render();
     });
   },
@@ -189,7 +194,7 @@ const App = {
       this.editingAttachments = [...(task.attachments || [])];
     } else {
       title.textContent = "Nova solicitação";
-      codeEl.textContent = Store.nextCode();
+      codeEl.textContent = "atribuído ao salvar";
       deleteBtn.style.display = "none";
       document.getElementById("task-form").reset();
       document.getElementById("task-id").value = "";

@@ -20,7 +20,9 @@ const Board = {
     STATUSES.forEach((status) => {
       const columnTasks = tasks
         .filter((t) => t.status === status.id)
-        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        .sort(status.id === "concluido"
+          ? (a, b) => new Date(b.completedAt || b.createdAt) - new Date(a.completedAt || a.createdAt)
+          : (a, b) => (a.order ?? 0) - (b.order ?? 0));
 
       const visible = this.visibleCounts[status.id] || this.pageSize;
       const shownTasks = columnTasks.slice(0, visible);
