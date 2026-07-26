@@ -43,7 +43,10 @@ const Dashboard = {
     const overdue = active.filter((t) => t.dueAt && new Date(t.dueAt) < now);
     const criticalOpen = active.filter((t) => t.priority === "alta");
 
-    const completionRate = total ? Math.round((completed.length / total) * 100) : 0;
+    // arredonda para baixo: só mostra 100% quando for de fato 100% (nunca
+    // esconde que ainda restam tarefas em aberto/andamento atrás de um
+    // arredondamento otimista)
+    const completionRate = total ? Math.floor((completed.length / total) * 100) : 0;
 
     const resolutionHours = completed
       .filter((t) => t.completedAt)
