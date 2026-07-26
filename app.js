@@ -109,18 +109,36 @@ const App = {
       if (e.key === "Escape" && backdrop.classList.contains("is-open")) this.closeModal();
     });
 
-    document.getElementById("task-attachment-input").addEventListener("change", (e) => {
-      [...e.target.files].forEach((file) => {
-        this.editingAttachments.push({ name: file.name, size: Math.max(1, Math.round(file.size / 1024)) });
-      });
+    document.getElementById("task-attachment-input").addEventListener("change", async (e) => {
+      const files = [...e.target.files];
       e.target.value = "";
-      this.renderAttachmentList();
+
+      for (const file of files) {
+        const placeholder = { name: file.name, size: Math.max(1, Math.round(file.size / 1024)), uploading: true };
+        this.editingAttachments.push(placeholder);
+        this.renderAttachmentList();
+
+        const path = `${this.currentTaskId}/${uid()}-${file.name}`;
+        const { error } = await sbClient.storage.from("attachments").upload(path, file);
+        const idx = this.editingAttachments.indexOf(placeholder);
+        if (error) {
+          console.error("Falha ao enviar anexo:", error);
+          showToast(`Falha ao enviar "${file.name}"`);
+          if (idx !== -1) this.editingAttachments.splice(idx, 1);
+        } else {
+          const { data } = sbClient.storage.from("attachments").getPublicUrl(path);
+          if (idx !== -1) this.editingAttachments[idx] = { name: file.name, size: placeholder.size, path, url: data.publicUrl };
+        }
+        this.renderAttachmentList();
+      }
     });
 
     document.getElementById("btn-delete-task").addEventListener("click", () => {
       if (!this.editingId) return;
+      const paths = this.editingAttachments.map((a) => a.path).filter(Boolean);
+      if (paths.length) sbClient.storage.from("attachments").remove(paths).catch(() => {});
       Store.remove(this.editingId);
-      this.closeModal();
+      this.closeModal(true);
       Filters.render();
       Board.render();
       showToast("Solicitação excluída");
@@ -129,7 +147,7 @@ const App = {
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const id = this.editingId || uid();
+      const id = this.currentTaskId;
       const dueAt = combineDateTime(
         document.getElementById("task-due-date").value,
         document.getElementById("task-due-time").value
@@ -159,7 +177,7 @@ const App = {
       await Store.upsert(task);
       submitBtn.disabled = false;
 
-      this.closeModal();
+      this.closeModal(true);
       Filters.render();
       Board.render();
       showToast(wasEditing ? "Solicitação atualizada" : "Solicitação criada");
@@ -169,6 +187,8 @@ const App = {
 
   openModal(taskId, defaultStatus) {
     this.editingId = taskId;
+    this.currentTaskId = taskId || uid();
+    this.attachmentsAtOpen = [];
     const backdrop = document.getElementById("modal-backdrop");
     const title = document.getElementById("modal-title");
     const codeEl = document.getElementById("modal-code");
@@ -192,6 +212,7 @@ const App = {
       document.getElementById("task-due-date").value = toDateInputValue(task.dueAt);
       document.getElementById("task-due-time").value = toTimeInputValue(task.dueAt) || "17:00";
       this.editingAttachments = [...(task.attachments || [])];
+      this.attachmentsAtOpen = this.editingAttachments.map((a) => a.path).filter(Boolean);
     } else {
       title.textContent = "Nova solicitação";
       codeEl.textContent = "atribuído ao salvar";
@@ -218,26 +239,43 @@ const App = {
       return;
     }
     list.innerHTML = this.editingAttachments.map((a, i) => `
-      <span class="attachment-chip">
+      <span class="attachment-chip ${a.uploading ? "is-uploading" : ""}">
         ${clipIcon()}
-        <span class="attachment-chip-name">${escapeHtml(a.name)}</span>
+        ${a.url
+          ? `<a class="attachment-chip-name" href="${escapeAttr(a.url)}" target="_blank" rel="noopener noreferrer" download="${escapeAttr(a.name)}">${escapeHtml(a.name)}</a>`
+          : `<span class="attachment-chip-name is-unavailable" title="${a.uploading ? "Enviando…" : "Arquivo original não disponível (anexo importado da planilha, antes do upload real existir)"}">${escapeHtml(a.name)}${a.uploading ? " · enviando…" : ""}</span>`}
         <span class="attachment-chip-size mono">${a.size}kb</span>
         <button type="button" class="attachment-remove" data-index="${i}" aria-label="Remover anexo">×</button>
       </span>
     `).join("");
 
     list.querySelectorAll(".attachment-remove").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        this.editingAttachments.splice(Number(btn.dataset.index), 1);
+      btn.addEventListener("click", async () => {
+        const idx = Number(btn.dataset.index);
+        const a = this.editingAttachments[idx];
+        this.editingAttachments.splice(idx, 1);
         this.renderAttachmentList();
+        if (a.path) {
+          const { error } = await sbClient.storage.from("attachments").remove([a.path]);
+          if (error) console.error("Falha ao remover anexo do armazenamento:", error);
+        }
       });
     });
   },
 
-  closeModal() {
+  closeModal(saved) {
     document.getElementById("modal-backdrop").classList.remove("is-open");
+    if (!saved) {
+      // descarta arquivos enviados durante esta edição que nunca chegaram a
+      // ser salvos na tarefa (cancelar, fechar, Esc)
+      const orphaned = this.editingAttachments.filter((a) => a.path && !this.attachmentsAtOpen.includes(a.path));
+      if (orphaned.length) {
+        sbClient.storage.from("attachments").remove(orphaned.map((a) => a.path)).catch(() => {});
+      }
+    }
     this.editingId = null;
     this.editingAttachments = [];
+    this.attachmentsAtOpen = [];
   },
 };
 

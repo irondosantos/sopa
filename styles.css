@@ -800,7 +800,18 @@ main { padding: 28px; max-width: 1440px; margin: 0 auto; }
   color: var(--ink-muted);
   font-size: 0.78rem;
 }
-.attachment-chip-name { flex: 1; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-chip.is-uploading { opacity: 0.65; }
+.attachment-chip-name {
+  flex: 1;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: none;
+}
+a.attachment-chip-name { color: var(--accent-hi); font-weight: 600; cursor: pointer; }
+a.attachment-chip-name:hover { text-decoration: underline; }
+.attachment-chip-name.is-unavailable { color: var(--ink-faint); font-style: italic; cursor: default; }
 .attachment-chip-size { color: var(--ink-faint); font-size: 0.7rem; }
 .attachment-remove {
   background: none;
