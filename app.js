@@ -242,12 +242,36 @@ const App = {
       <span class="attachment-chip ${a.uploading ? "is-uploading" : ""}">
         ${clipIcon()}
         ${a.url
-          ? `<a class="attachment-chip-name" href="${escapeAttr(a.url)}" target="_blank" rel="noopener noreferrer" download="${escapeAttr(a.name)}">${escapeHtml(a.name)}</a>`
+          ? `<a class="attachment-chip-name" href="${escapeAttr(a.url)}" data-download-name="${escapeAttr(a.name)}">${escapeHtml(a.name)}</a>`
           : `<span class="attachment-chip-name is-unavailable" title="${a.uploading ? "Enviando…" : "Arquivo original não disponível (anexo importado da planilha, antes do upload real existir)"}">${escapeHtml(a.name)}${a.uploading ? " · enviando…" : ""}</span>`}
         <span class="attachment-chip-size mono">${a.size}kb</span>
         <button type="button" class="attachment-remove" data-index="${i}" aria-label="Remover anexo">×</button>
       </span>
     `).join("");
+
+    list.querySelectorAll("a.attachment-chip-name[data-download-name]").forEach((link) => {
+      link.addEventListener("click", async (e) => {
+        e.preventDefault();
+        const url = link.getAttribute("href");
+        const name = link.dataset.downloadName;
+        try {
+          const res = await fetch(url);
+          if (!res.ok) throw new Error("resposta não-ok ao baixar anexo");
+          const blob = await res.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = blobUrl;
+          a.download = name;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(blobUrl);
+        } catch (err) {
+          console.error("Falha ao baixar anexo, abrindo em nova aba:", err);
+          window.open(url, "_blank");
+        }
+      });
+    });
 
     list.querySelectorAll(".attachment-remove").forEach((btn) => {
       btn.addEventListener("click", async () => {
